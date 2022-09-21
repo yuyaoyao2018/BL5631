@@ -1,0 +1,77 @@
+library(GEOquery)
+library(oligo)
+library(dplyr)
+library(limma)
+library(oligoClasses)
+library(tidyverse)
+
+#read files
+gse50737_geo <- getGEO('GSE50737')
+gse50737 <- gse50737_geo[[1]]
+gse50737_celdata <- read.celfiles(list.celfiles(file.path("/Users/yu/Desktop/R/GSE50737"),full.names=TRUE))
+
+pd <- pData(gse50737)
+pd['cel_file'] <- str_split(pd$supplementary_file,"/") %>% map_chr(tail,1)
+gse50737_celdata <- read.celfiles(paste0('/Users/yu/Desktop/R/GSE50737/',pd$cel_file),phenoData=phenoData(gse50737))
+pData(gse50737_celdata)[,c("geo_accession","treatment:ch1")]
+
+gse50737_eset <- oligo::rma(gse50737_celdata)
+
+#Identifying differentially expressed genes using linear models
+design <- model.matrix(~ 0 + gse50737_eset[['treatment:ch1']])
+colnames(design) <- c("benzene_exposed","benzene_poisoning","control")
+rownames(design) = rownames(pd)
+
+contrast_matrix <- makeContrasts(benzene_poisoning-control, benzene_exposed-control,benzene_poisoning-benzene_exposed,levels=design)
+fit <- lmFit(gse50737_eset,design)
+fit2 <- contrasts.fit(fit,contrasts=contrast_matrix)
+fit2 <- eBayes(fit2)
+summary(decideTests(fit2,lfc=1))
+
+#volcano map
+##benzene_poisoning-control comparison
+interesting_genes_1 <- topTable(fit2,coef=1,number=Inf,p.value = 0.05,lfc=1)
+volcanoplot(fit2, coef=1, main=sprintf("%d features pass our cutoffs",nrow(interesting_genes_1)))
+points(interesting_genes_1[['logFC']],-log10(interesting_genes_1[['P.Value']]),col='red')
+#benzene_poisoning-benzene_exposed comparison
+interesting_genes_3 <- topTable(fit2,coef=3,number=Inf,p.value = 0.05,lfc=1)
+volcanoplot(fit2, coef=1, main=sprintf("%d features pass our cutoffs",nrow(interesting_genes_3)))
+points(interesting_genes_3[['logFC']],-log10(interesting_genes_3[['P.Value']]),col='red')
+
+#heatmap
+interesting_genes <- topTable(fit2,number=Inf,p.value = 0.05,lfc=1)
+eset_of_interest <- gse50737_eset[rownames(interesting_genes),]
+library(RColorBrewer)
+heatmap(exprs(eset_of_interest),
+        labCol=gse50737_eset[['culture medium:ch1']] ,labRow=NA,
+        col       = rev(brewer.pal(10, "RdBu")),
+        distfun   = function(x) as.dist(1-cor(t(x))))
+
+#annotation
+BiocManager::install("org.Hs.eg.db")
+library(org.Hs.eg.db)
+
+anno=getGEO('GPL16686')@dataTable@table
+probe2symbol=anno[,c(1,6)]
+probe2symbol=probe2symbol[probe2symbol[,2]!="",]
+gene_bridge=AnnotationDbi::select(org.Hs.eg.db, keys=probe2symbol[,2], 
+                                  columns=c("SYMBOL","ENTREZID","GENENAME"), 
+                                  keytype="ACCNUM") 
+probe2symbol=dplyr::left_join(probe2symbol,gene_bridge,by=c("GB_ACC"="ACCNUM"))
+probe2symbol=probe2symbol[,-2]
+probe2symbol=probe2symbol[!(probe2symbol[,2] %in% c("",NA,"---")),]
+
+##benzene_poisoning-control comparison
+interesting_genes_1[['ID']]=rownames(interesting_genes_1)
+interesting_genes_1 <- dplyr::inner_join(probe2symbol,interesting_genes_1,by="ID")
+upregulated_1 <- interesting_genes_1[interesting_genes_1$logFC>0,]
+downregulated_1 <- interesting_genes_1[interesting_genes_1$logFC<0,]
+write_excel_csv(upregulated_1 ,"upregulated_interesting_genes_1.csv")
+write_excel_csv(downregulated_1 ,"downregulated_interesting_genes_1.csv")
+##benzene_poisoning-benzene_exposed comparison
+interesting_genes_3[['ID']]=rownames(interesting_genes_3)
+interesting_genes_3 <- dplyr::inner_join(probe2symbol,interesting_genes_3,by="ID")
+upregulated_3 <- interesting_genes_3[interesting_genes_3$logFC>0,]
+downregulated_3 <- interesting_genes_3[interesting_genes_3$logFC<0,]
+write_excel_csv(upregulated_3 ,"upregulated_interesting_genes_3.csv")
+write_excel_csv(downregulated_3 ,"downregulated_interesting_genes_3.csv")
