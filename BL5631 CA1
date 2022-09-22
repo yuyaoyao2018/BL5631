@@ -35,7 +35,7 @@ volcanoplot(fit2, coef=1, main=sprintf("%d features pass our cutoffs",nrow(inter
 points(interesting_genes_1[['logFC']],-log10(interesting_genes_1[['P.Value']]),col='red')
 #benzene_poisoning-benzene_exposed comparison
 interesting_genes_3 <- topTable(fit2,coef=3,number=Inf,p.value = 0.05,lfc=1)
-volcanoplot(fit2, coef=1, main=sprintf("%d features pass our cutoffs",nrow(interesting_genes_3)))
+volcanoplot(fit2, coef=3, main=sprintf("%d features pass our cutoffs",nrow(interesting_genes_3)))
 points(interesting_genes_3[['logFC']],-log10(interesting_genes_3[['P.Value']]),col='red')
 
 #heatmap
