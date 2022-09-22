@@ -43,7 +43,7 @@ interesting_genes <- topTable(fit2,number=Inf,p.value = 0.05,lfc=1)
 eset_of_interest <- gse50737_eset[rownames(interesting_genes),]
 library(RColorBrewer)
 heatmap(exprs(eset_of_interest),
-        labCol=gse50737_eset[['culture medium:ch1']] ,labRow=NA,
+        labCol=gse50737_eset[['treatment:ch1']] ,labRow=NA,
         col       = rev(brewer.pal(10, "RdBu")),
         distfun   = function(x) as.dist(1-cor(t(x))))
 
